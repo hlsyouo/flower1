@@ -1,0 +1,199 @@
+const maxFlowerSize = 120;
+const lineMaxDist = 10;
+const maxPressFrames = 180; // 3초 (60fps 기준)
+
+let flowerX = 0;
+let flowerY = 0;
+let flowerType = 1;
+let flowerList = []; // {x, y, type, progress}
+let mousePressState = false;
+let mousePressFrame = 0;
+let lineList = [];
+let pg; // 배경 + 균열 저장용 버퍼
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    pg = createGraphics(windowWidth, windowHeight);
+    pg.background(180, 174, 170);
+    createBreakLine();
+}
+
+function createBreakLine() {
+    let segments = floor(random(5, 7));
+    for (let i = 0; i < segments; i++) {
+        createFracture(windowWidth / 3, windowHeight / 3, random(500, 1000), random(TWO_PI));
+    }
+    for (let i = 0; i < segments; i++) {
+        createFracture(windowWidth * 2 / 3, windowHeight * 2 / 3, random(500, 1000), random(TWO_PI));
+    }
+}
+
+function draw() {
+    image(pg, 0, 0); // 배경(균열 포함) 복원
+
+    // 저장된 꽃 다시 그리기
+    for (let f of flowerList) {
+        drawFlowerMosaic(f.x, f.y, f.type, f.progress);
+    }
+
+    // 현재 자라나는 꽃
+    if (mousePressState) {
+        let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
+        drawFlowerMosaic(flowerX, flowerY, flowerType, progress);
+    }
+}
+
+// 모자이크 → 꽃 전환
+function drawFlowerMosaic(fx, fy, type, progress) {
+    let S = maxFlowerSize;
+    let blockSize = max(2, round(lerp(32, 2, progress)));
+
+    noStroke();
+    rectMode(CORNER);
+
+    for (let gx = fx - S; gx < fx + S; gx += blockSize) {
+        for (let gy = fy - S; gy < fy + S; gy += blockSize) {
+            // 블럭 중심의 꽃 중심 기준 상대좌표
+            let dx = (gx + blockSize / 2) - fx;
+            let dy = (gy + blockSize / 2) - fy;
+
+            let c = getFlowerColor(dx, dy, type);
+            if (c !== null) {
+                fill(c);
+                rect(gx, gy, blockSize, blockSize);
+            }
+        }
+    }
+}
+
+// (dx, dy) 위치의 꽃 색상 반환. 꽃 영역 밖이면 null
+function getFlowerColor(dx, dy, type) {
+    let r = sqrt(dx * dx + dy * dy);
+    let S = maxFlowerSize;
+
+    if (type === 1) {
+        // 중심
+        if (r < S * 0.25) return color(255, 109, 0);
+
+        // 주황 꽃잎 (6장) — 더 짧고 넓음
+        let lw2 = S * 0.34;
+        for (let i = 0; i < 6; i++) {
+            let a = (TWO_PI / 6) * i;
+            let rdx = dx * cos(a) + dy * sin(a);
+            let rdy = -dx * sin(a) + dy * cos(a);
+            if (rdx >= -lw2/2 && rdx <= lw2/2 && rdy >= S*0.2 && rdy <= S*0.7) {
+                return color(255, 170, 0);
+            }
+        }
+
+        // 노란 꽃잎 (13장) — 길고 좁음
+        let lw1 = S * 0.3;
+        for (let i = 0; i < 13; i++) {
+            let a = (TWO_PI / 13) * i;
+            let rdx = dx * cos(a) + dy * sin(a);
+            let rdy = -dx * sin(a) + dy * cos(a);
+            if (rdx >= -lw1/2 && rdx <= lw1/2 && rdy >= S*0.2 && rdy <= S) {
+                return color(255, 212, 0);
+            }
+        }
+
+        return null;
+    }
+
+    if (type === 2) {
+        // 중심
+        if (r < S * 0.35) return color(255, 218, 0);
+
+        // 흰 꽃잎 (36장)
+        for (let i = 0; i < 36; i++) {
+            let a = (TWO_PI / 36) * i;
+            let rdx = dx * cos(a) + dy * sin(a);
+            let rdy = -dx * sin(a) + dy * cos(a);
+            if (rdx >= -S*0.05 && rdx <= S*0.01 && rdy >= S*0.2 && rdy <= S) {
+                return color(255, 255, 255);
+            }
+        }
+
+        return null;
+    }
+
+    if (type === 3) {
+        if (r < S * 0.5) return color(150, 200, 100);
+        return null;
+    }
+
+    return null;
+}
+
+function mousePressed() {
+    let mouseLeft   = mouseX - lineMaxDist;
+    let mouseRight  = mouseX + lineMaxDist;
+    let mouseTop    = mouseY - lineMaxDist;
+    let mouseBottom = mouseY + lineMaxDist;
+    let d = lineMaxDist * 2;
+
+    for (let i = 0; i < lineList.length; i++) {
+        let item = lineList[i];
+        if ((item.sx < mouseLeft  && item.ex < mouseLeft)  ||
+            (item.sx > mouseRight && item.ex > mouseRight) ||
+            (item.sy < mouseTop   && item.ey < mouseTop)   ||
+            (item.sy > mouseBottom && item.ey > mouseBottom)) {
+            continue;
+        }
+        d = getDistanceToLine(mouseX, mouseY, item.sx, item.sy, item.ex, item.ey);
+        if (d <= lineMaxDist) break;
+    }
+
+    if (d > lineMaxDist) return;
+
+    flowerX = mouseX;
+    flowerY = mouseY;
+    mousePressState = true;
+    mousePressFrame = frameCount;
+}
+
+function mouseReleased() {
+    if (mousePressState) {
+        let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
+        if (progress > 0.05) { // 너무 짧게 누르면 저장 안 함
+            flowerList.push({ x: flowerX, y: flowerY, type: flowerType, progress: progress });
+        }
+    }
+    mousePressState = false;
+}
+
+function keyPressed() {
+    if (49 <= keyCode && keyCode <= 57) {
+        flowerType = keyCode - 48;
+    }
+}
+
+function createFracture(x, y, len, angle) {
+    let steps = 5;
+    let currX = x;
+    let currY = y;
+    for (let i = 0; i < steps; i++) {
+        let nextAngle = angle + random(-0.5, 0.5);
+        let nextX = currX + cos(nextAngle) * (len / steps);
+        let nextY = currY + sin(nextAngle) * (len / steps);
+
+        pg.stroke(0);
+        pg.strokeWeight(2);
+        pg.line(floor(currX), floor(currY), floor(nextX), floor(nextY));
+
+        lineList.push({ sx:floor(currX), sy:floor(currY), ex:floor(nextX), ey:floor(nextY) });
+
+        currX = nextX;
+        currY = nextY;
+    }
+}
+
+function getDistanceToLine(px, py, x1, y1, x2, y2) {
+    let l2 = dist(x1, y1, x2, y2) ** 2;
+    if (l2 === 0) return dist(px, py, x1, y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = constrain(t, 0, 1);
+    let closestX = x1 + t * (x2 - x1);
+    let closestY = y1 + t * (y2 - y1);
+    return dist(px, py, closestX, closestY);
+} 1. 1번꽃과 2번꽃의 속도가 다르다. 2. 살짝 누르면 꽃 사라지는 버그 3. 완성된 꽃은 여전히 픽셀의 느낌이 남아있다. 4. 꽃의 크기가 너무 크다.
