@@ -17,9 +17,11 @@ let mousePressState = false;
 let mousePressFrame = 0;
 let lineList = [];
 let pg; // 배경 + 균열 저장용 버퍼
+let fg; // 꽃 그리기용 버퍼 
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
+    fg = createGraphics(windowWidth, windowHeight);
     pg = createGraphics(windowWidth, windowHeight);
     pg.background(180, 174, 170);
     createBreakLine(); // 균열 생성
@@ -38,17 +40,22 @@ function createBreakLine() {
 
 function draw() {
     image(pg, 0, 0); // 배경(균열 포함) 그리기
+    fg.clear(); // 꽃 그리기 버퍼 초기화
 
+    /*
     // 저장된 꽃들 다시 그리기
     for (let f of flowerList) {
         drawFlowerMosaic(f.x, f.y, f.type, f.progress);
     }
+    */
 
     // 현재 실시간으로 자라나는 꽃
     if (mousePressState) {
         let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
         drawFlowerMosaic(flowerX, flowerY, flowerType, progress);
     }
+
+    image(fg, 0, 0); // 현재 꽃 그리기
 }
 
 // 모자이크 → 매끄러운 꽃 전환 함수
@@ -57,8 +64,8 @@ function drawFlowerMosaic(fx, fy, type, progress) {
     // 1 & 3. progress에 따라 blockSize가 1까지 작아져서 픽셀 느낌을 제거함
     let blockSize = max(1, lerp(25, 1, progress)); 
 
-    noStroke();
-    rectMode(CORNER);
+    fg.noStroke();
+    fg.rectMode(CORNER);
 
     for (let gx = fx - S; gx < fx + S; gx += blockSize) {
         for (let gy = fy - S; gy < fy + S; gy += blockSize) {
@@ -67,9 +74,9 @@ function drawFlowerMosaic(fx, fy, type, progress) {
 
             let c = getFlowerColor(dx, dy, type);
             if (c !== null) {
-                fill(c);
+                fg.fill(c);
                 // 픽셀 간 미세한 빈틈 방지를 위해 0.5px 크게 그림
-                rect(gx, gy, blockSize + 0.5, blockSize + 0.5);
+                fg.rect(gx, gy, blockSize + 0.5, blockSize + 0.5);
             }
         }
     }
@@ -152,6 +159,7 @@ function mousePressed() {
 
 function mouseReleased() {
     if (mousePressState) {
+        /*
         let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
         // 2. 아주 살짝만 눌러도 최소 15% 자란 상태로 남겨서 사라짐 버그 해결
         flowerList.push({ 
@@ -160,13 +168,15 @@ function mouseReleased() {
             type: flowerType, 
             progress: max(0.15, progress) 
         });
+        */
+       pg.image(fg, 0, 0); // 현재 꽃을 배경에 영구적으로 추가
     }
     mousePressState = false;
 }
 
 function keyPressed() {
     // 숫자 키 1~9로 타입 변경
-    if (key >= '1' && key <= '9') {
+    if (mousePressState === false && key >= '1' && key <= '9') {
         flowerType = int(key);
     }
 }
