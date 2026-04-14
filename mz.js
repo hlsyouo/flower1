@@ -1,82 +1,108 @@
-/**
- * 1. 1, 2번 꽃의 속도 통일
- * 2. 짧은 클릭 시 사라지는 버그 수정
- * 3. 완성 시 픽셀 느낌 제거 (blockSize 1로 수렴)
- * 4. 꽃 크기 축소 (maxFlowerSize: 60)
- */
+const maxFlowerSize = 45;   
+const lineMaxDist = 15;     
+const maxPressFrames = 300; 
 
-const maxFlowerSize = 60;   // 4. 꽃 크기 축소
-const lineMaxDist = 15;     // 클릭 감지 반경
-const maxPressFrames = 120; // 약 2초 (60fps 기준)
-
-let flowerX = 0;
-let flowerY = 0;
+let flowerX = 0, flowerY = 0;
 let flowerType = 1;
-let flowerList = [];        // {x, y, type, progress}
 let mousePressState = false;
 let mousePressFrame = 0;
 let lineList = [];
-let pg; // 배경 + 균열 저장용 버퍼
-let fg; // 꽃 그리기용 버퍼 
+let pg, fg; 
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
     fg = createGraphics(windowWidth, windowHeight);
     pg = createGraphics(windowWidth, windowHeight);
-    pg.background(180, 174, 170);
-    createBreakLine(); // 균열 생성
-}
-
-function createBreakLine() {
-    // 기존 코드의 위치 로직 복구
-    let segments = floor(random(5, 7));
-    for (let i = 0; i < segments; i++) {
-        createFracture(windowWidth / 3, windowHeight / 3, random(500, 1000), random(TWO_PI));
-    }
-    for (let i = 0; i < segments; i++) {
-        createFracture(windowWidth * 2 / 3, windowHeight * 2 / 3, random(500, 1000), random(TWO_PI));
-    }
+    pg.background(180, 174, 170); 
+    createBreakLine(); 
 }
 
 function draw() {
-    image(pg, 0, 0); // 배경(균열 포함) 그리기
-    fg.clear(); // 꽃 그리기 버퍼 초기화
+    image(pg, 0, 0); 
+    fg.clear(); 
 
-    /*
-    // 저장된 꽃들 다시 그리기
-    for (let f of flowerList) {
-        drawFlowerMosaic(f.x, f.y, f.type, f.progress);
-    }
-    */
-
-    // 현재 실시간으로 자라나는 꽃
     if (mousePressState) {
         let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
-        drawFlowerMosaic(flowerX, flowerY, flowerType, progress);
+        drawConsistentFlower(flowerX, flowerY, flowerType, progress, fg);
     }
+    image(fg, 0, 0); 
 
-    image(fg, 0, 0); // 현재 꽃 그리기
+    drawHelpUI();
 }
 
-// 모자이크 → 매끄러운 꽃 전환 함수
-function drawFlowerMosaic(fx, fy, type, progress) {
+function drawHelpUI() {
+    let uiX = width - 40;
+    let uiY = 35;
+
+    let isHover = dist(mouseX, mouseY, uiX, uiY) < 25;
+
+    if (!isHover) {
+        fill(0);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(28);
+        textStyle(BOLD);
+        text("?", uiX, uiY);
+    } else {
+        let panelW = 100;
+        let panelH = 160;
+        let panelX = width - panelW - 20;
+        let panelY = 20;
+
+        fill(0, 80);
+        noStroke();
+        rect(panelX, panelY, panelW, panelH);
+
+        for (let i = 1; i <= 3; i++) {
+            let rowY = panelY + (i * 40) + 10;
+            
+            fill(255);
+            textAlign(LEFT, CENTER);
+            textSize(18);
+
+            if (flowerType === i) {
+                textStyle(BOLD);
+            } else {
+                textStyle(NORMAL);
+            }
+
+            text(i, panelX + 15, rowY);
+
+            push();
+            translate(panelX + 65, rowY);
+            scale(0.35); 
+            drawConsistentFlower(0, 0, i, 1.0, this); 
+            pop();
+        }
+    }
+}
+
+// ✅ 핵심 수정 부분
+function drawConsistentFlower(fx, fy, type, progress, buffer) {
     let S = maxFlowerSize;
-    // 1 & 3. progress에 따라 blockSize가 1까지 작아져서 픽셀 느낌을 제거함
-    let blockSize = max(1, lerp(25, 1, progress)); 
 
-    fg.noStroke();
-    fg.rectMode(CORNER);
+    // 성장 비율 (최소 0.1 → 최대 1)
+    let scaleFactor = constrain(progress, 0.1, 1);
 
-    for (let gx = fx - S; gx < fx + S; gx += blockSize) {
-        for (let gy = fy - S; gy < fy + S; gy += blockSize) {
+    // 모자이크 블록 크기 (기존 유지)
+    let blockSize = progress >= 1.0 ? 0.5 : max(1, lerp(20, 1, progress)); 
+
+    buffer.noStroke();
+    
+    for (let gx = fx - S * 1.3; gx < fx + S * 1.3; gx += blockSize) {
+        for (let gy = fy - S * 1.3; gy < fy + S * 1.3; gy += blockSize) {
+
             let dx = (gx + blockSize / 2) - fx;
             let dy = (gy + blockSize / 2) - fy;
 
+            // ✅ 크기 성장 적용
+            dx /= scaleFactor;
+            dy /= scaleFactor;
+
             let c = getFlowerColor(dx, dy, type);
             if (c !== null) {
-                fg.fill(c);
-                // 픽셀 간 미세한 빈틈 방지를 위해 0.5px 크게 그림
-                fg.rect(gx, gy, blockSize + 0.5, blockSize + 0.5);
+                buffer.fill(c);
+                buffer.rect(gx, gy, blockSize + 0.2, blockSize + 0.2);
             }
         }
     }
@@ -85,133 +111,114 @@ function drawFlowerMosaic(fx, fy, type, progress) {
 function getFlowerColor(dx, dy, type) {
     let r = sqrt(dx * dx + dy * dy);
     let S = maxFlowerSize;
-
-    if (type === 1) {
-        // 중심부
-        if (r < S * 0.25) return color(255, 109, 0);
-
-        // 주황 꽃잎 (6장)
-        let lw2 = S * 0.35;
+    
+    if (type === 1) { 
+        if (r < S * 0.29) return color(255, 109, 0); 
+        let lw2 = S * 0.35; 
         for (let i = 0; i < 6; i++) {
             let a = (TWO_PI / 6) * i;
             let rdx = dx * cos(a) + dy * sin(a);
             let rdy = -dx * sin(a) + dy * cos(a);
-            if (rdx >= -lw2/2 && rdx <= lw2/2 && rdy >= S*0.2 && rdy <= S*0.7) {
-                return color(255, 170, 0);
-            }
+            if (rdx >= -lw2/2 && rdx <= lw2/2 && rdy >= S*0.25 && rdy <= S*0.7) return color(255, 170, 0);
         }
-
-        // 노란 꽃잎 (12장)
-        let lw1 = S * 0.25;
+        let lw1 = S * 0.35; 
         for (let i = 0; i < 12; i++) {
             let a = (TWO_PI / 12) * i;
             let rdx = dx * cos(a) + dy * sin(a);
             let rdy = -dx * sin(a) + dy * cos(a);
-            if (rdx >= -lw1/2 && rdx <= lw1/2 && rdy >= S*0.2 && rdy <= S) {
-                return color(255, 212, 0);
-            }
+            if (rdx >= -lw1/2 && rdx <= lw1/2 && rdy >= S*0.25 && rdy <= S) return color(255, 212, 0);
         }
-        return null;
     }
-
-    if (type === 2) {
-        // 중심부
-        if (r < S * 0.35) return color(255, 218, 0);
-
-        // 흰색 꽃잎 (24장)
+    else if (type === 2) { 
+        if (r < S * 0.36) return color(255, 218, 0); 
+        let lwMid = S * 0.1;
         for (let i = 0; i < 24; i++) {
             let a = (TWO_PI / 24) * i;
             let rdx = dx * cos(a) + dy * sin(a);
             let rdy = -dx * sin(a) + dy * cos(a);
-            if (rdx >= -S*0.06 && rdx <= S*0.06 && rdy >= S*0.2 && rdy <= S) {
-                return color(255, 255, 255);
-            }
+            if (rdx >= -lwMid/2 && rdx <= lwMid/2 && rdy >= S*0.25 && rdy <= S) return color(255);
         }
-        return null;
     }
-
-    // 3번 꽃 (초록 심플)
-    if (type === 3) {
-        if (r < S * 0.5) return color(150, 200, 100);
-        return null;
+    else if (type === 3) { 
+        let numInner = 5, innerR = S * 0.2; 
+        for (let i = 0; i < numInner; i++) {
+            let a = (TWO_PI / numInner) * i;
+            if (dist(dx, dy, cos(a)*S*0.25, sin(a)*S*0.25) < innerR) return color(255, 212, 40);
+        }
+        let numMid = 6, midR = S * 0.32;
+        for (let i = 0; i < numMid; i++) {
+            let a = (TWO_PI / numMid) * i;
+            if (dist(dx, dy, cos(a)*S*0.42, sin(a)*S*0.42) < midR) return color(255, 140, 110);
+        }
+        let numOuter = 10, outerR = S * 0.35; 
+        for (let i = 0; i < numOuter; i++) {
+            let a = (TWO_PI / numOuter) * i;
+            if (dist(dx, dy, cos(a)*S*0.75, sin(a)*S*0.75) < outerR) return color(255);
+        }
     }
-
     return null;
 }
 
 function mousePressed() {
     let onLine = false;
     for (let item of lineList) {
-        let d = getDistanceToLine(mouseX, mouseY, item.sx, item.sy, item.ex, item.ey);
-        if (d <= lineMaxDist) {
-            onLine = true;
-            break;
+        if (getDistanceToLine(mouseX, mouseY, item.sx, item.sy, item.ex, item.ey) <= lineMaxDist) {
+            onLine = true; break;
         }
     }
-
     if (onLine) {
-        flowerX = mouseX;
+        flowerX = mouseX; 
         flowerY = mouseY;
-        mousePressState = true;
+        mousePressState = true; 
         mousePressFrame = frameCount;
     }
 }
 
 function mouseReleased() {
     if (mousePressState) {
-        /*
         let progress = min(1, (frameCount - mousePressFrame) / maxPressFrames);
-        // 2. 아주 살짝만 눌러도 최소 15% 자란 상태로 남겨서 사라짐 버그 해결
-        flowerList.push({ 
-            x: flowerX, 
-            y: flowerY, 
-            type: flowerType, 
-            progress: max(0.15, progress) 
-        });
-        */
-       pg.image(fg, 0, 0); // 현재 꽃을 배경에 영구적으로 추가
+        drawConsistentFlower(flowerX, flowerY, flowerType, progress, pg);
     }
     mousePressState = false;
 }
 
 function keyPressed() {
-    // 숫자 키 1~9로 타입 변경
-    if (mousePressState === false && key >= '1' && key <= '9') {
+    if (!mousePressState && key >= '1' && key <= '9') {
         flowerType = int(key);
     }
 }
 
 function createFracture(x, y, len, angle) {
     let steps = 6;
-    let currX = x;
-    let currY = y;
+    let currX = x, currY = y;
     for (let i = 0; i < steps; i++) {
         let nextAngle = angle + random(-0.4, 0.4);
         let nextX = currX + cos(nextAngle) * (len / steps);
         let nextY = currY + sin(nextAngle) * (len / steps);
-
         pg.stroke(60, 50, 40); 
         pg.strokeWeight(2);
         pg.line(currX, currY, nextX, nextY);
-
-        // 거리 계산을 위해 라인 리스트 저장
         lineList.push({ sx: currX, sy: currY, ex: nextX, ey: nextY });
-
-        currX = nextX;
+        currX = nextX; 
         currY = nextY;
+    }
+}
+
+function createBreakLine() {
+    let segments = floor(random(5, 7));
+    for (let i = 0; i < segments; i++) {
+        createFracture(width / 3, height / 3, random(500, 1000), random(TWO_PI));
+        createFracture(width * 2 / 3, height * 2 / 3, random(500, 1000), random(TWO_PI));
     }
 }
 
 function getDistanceToLine(px, py, x1, y1, x2, y2) {
     let l2 = dist(x1, y1, x2, y2) ** 2;
     if (l2 === 0) return dist(px, py, x1, y1);
-    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-    t = constrain(t, 0, 1);
-    let closestX = x1 + t * (x2 - x1);
-    let closestY = y1 + t * (y2 - y1);
-    return dist(px, py, closestX, closestY);
+    let t = constrain(((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2, 0, 1);
+    return dist(px, py, x1 + t * (x2 - x1), y1 + t * (y2 - y1));
 }
 
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
+function windowResized() { 
+    resizeCanvas(windowWidth, windowHeight); 
 }
