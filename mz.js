@@ -6,12 +6,13 @@ let flowerType = 1;
 let mousePressState = false;
 let mousePressFrame = 0;
 let lineList = [];
-let pg, fg;
+let pg, fg, hg;
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
     fg = createGraphics(windowWidth, windowHeight);
     pg = createGraphics(windowWidth, windowHeight);
+    hg = createGraphics(windowWidth, windowHeight);
     pg.background(133, 131, 130);
     createBreakLine();
     pg.fill(255);
@@ -19,6 +20,7 @@ function setup() {
     pg.textAlign(LEFT, TOP);
     pg.textSize(14);
     pg.text("틈 사이를 꾹 눌러보세요.", 24, 24);
+    drawHelpUIHg();
 }
 
 function draw() {
@@ -43,7 +45,69 @@ function keyPressed() {
     }
 } */
 
-function drawHelpUI() {
+function drawHelpUIHg() {
+    let panelW = 130;
+    let panelH = 430;
+    let panelX = width - panelW - 20;
+    let panelY = 20;
+    hg.fill(133, 131, 130);
+    hg.strokeWeight(2);
+    hg.stroke(255);
+    hg.rect(panelX, panelY, panelW, panelH);
+    hg.fill(255);
+    hg.noStroke();
+    hg.textAlign(CENTER, TOP);
+    hg.textSize(10);
+    hg.textStyle(NORMAL);
+    let lines = ["숫자 키패드를 누르면", "다른 꽃을 그릴 수 있습니다."];
+    for (let l = 0; l < lines.length; l++) {
+        hg.text(lines[l], panelX + panelW / 2, panelY + 17 + l * 14);
+    }
+    for (let i = 1; i <= 9; i++) {
+        let rowY = panelY + 35 + (i * 40);
+        hg.fill(255);
+        hg.textAlign(LEFT, CENTER);
+        hg.textSize(18);
+        hg.textStyle(NORMAL);
+        hg.text(i, panelX + 30, rowY + 2);
+        hg.push();
+        hg.translate(panelX + 80, rowY);
+        hg.scale(0.35);
+        drawConsistentFlower(0, 0, i, 1.0, hg);
+        hg.pop();
+    }
+}
+    
+    function drawHelpUI() {
+    let uiX = width - 40;
+    let uiY = 35;
+    let isHover = dist(mouseX, mouseY, uiX, uiY) < 25;
+    if (!isHover) {
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(28);
+        textStyle(BOLD);
+        text("?", uiX, uiY);
+    } else {
+        image(hg, 0, 0);
+
+        let panelW = 130;
+        let panelH = 430;
+        let panelX = width - panelW - 20;
+        let panelY = 20;
+
+        let rowY = panelY + 35 + (flowerType * 40);
+        fill(255);
+        textAlign(LEFT, CENTER);
+        textSize(18);
+        textStyle(BOLD);
+        fill(255, 193, 38);
+        text(flowerType, panelX + 30, rowY + 2);
+    }
+}
+
+function drawHelpUI_backup() {
     let uiX = width - 40;
     let uiY = 35;
     let isHover = dist(mouseX, mouseY, uiX, uiY) < 25;
