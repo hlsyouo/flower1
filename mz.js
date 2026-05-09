@@ -424,13 +424,68 @@ function getFlowerColor(dx, dy, type) {
     return null;
 }
 
-function mousePressed() {
+function mousePressed_backup() {
     let onLine = false;
     for (let item of lineList) {
         if (getDistanceToLine(mouseX, mouseY, item.sx, item.sy, item.ex, item.ey) <= lineMaxDist) {
             onLine = true; break;
         }
     }
+    if (onLine) {
+        flowerX = mouseX; flowerY = mouseY;
+        mousePressState = true; mousePressFrame = frameCount;
+    }
+}
+
+function mousePressed() {
+    let onLine = false;
+
+    // 1. 마우스 기반 관심 영역(AOI) 정의 (Bounding Box)
+    const searchMinX = mouseX - lineMaxDist;
+    const searchMaxX = mouseX + lineMaxDist;
+    const searchMinY = mouseY - lineMaxDist;
+    const searchMaxY = mouseY + lineMaxDist;
+
+    for (let item of lineList) {
+        // 2. 라인의 최소 경계 박스 (Minimum Bounding Box, MBB) 계산 - Math 사용 제외
+        let mbbMinX, mbbMaxX, mbbMinY, mbbMaxY;
+
+        // X 좌표 최솟값/최댓값 계산
+        if (item.sx < item.ex) {
+            mbbMinX = item.sx;
+            mbbMaxX = item.ex;
+        } else {
+            mbbMinX = item.ex;
+            mbbMaxX = item.sx;
+        }
+
+        // Y 좌표 최솟값/최댓값 계산
+        if (item.sy < item.ey) {
+            mbbMinY = item.sy;
+            mbbMaxY = item.ey;
+        } else {
+            mbbMinY = item.ey;
+            mbbMaxY = item.sy;
+        }
+
+        // 3. Bounding Box 교차 검사 (Overlap Test)
+        // 분리되는 경우를 확인하여, 겹치는 경우에만 통과시킵니다.
+        // (두 끝점 모두 검색 박스 밖에 있으면 제외)
+        const separatedX = mbbMaxX < searchMinX || mbbMinX > searchMaxX;
+        const separatedY = mbbMaxY < searchMinY || mbbMinY > searchMaxY;
+
+        // 두 끝점이 둘 다 검색 박스 밖에 있으면 건너뜁니다.
+        if (separatedX || separatedY) {
+            continue; // 이 라인은 관심 영역 밖에 있으므로 검사하지 않고 건너뜁니다.
+        }
+
+        // 4. 정밀 검사 (필터링을 통과한 후보군에 대해서만 실행)
+        if (getDistanceToLine(mouseX, mouseY, item.sx, item.sy, item.ex, item.ey) <= lineMaxDist) {
+            onLine = true;
+            break; // 근접함을 확인했으므로 즉시 종료합니다.
+        }
+    }
+
     if (onLine) {
         flowerX = mouseX; flowerY = mouseY;
         mousePressState = true; mousePressFrame = frameCount;
